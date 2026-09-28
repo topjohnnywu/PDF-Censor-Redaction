@@ -1,0 +1,6 @@
+{
+  "name": "PDF Censor & Redaction Studio",
+  "description": "Secure, 100% in-browser visual redaction tool for PDFs with pixel-level permanent burn-in export and multi-page alignment.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,1913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Censor & Permanent Redaction Studio</title>
+
+<!-- Standalone PDF.js & jsPDF for 100% direct double-click execution (file:// friendly, no admin/server required) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  if (window.pdfjsLib) {
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  }
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+<style>
+    * { box-sizing: border-box; }
+
+    body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+        background: #090d16;
+        color: #f1f5f9;
+        user-select: none;
+        overflow: hidden;
+    }
+
+    /* TOP HEADER */
+    .toolbar {
+        height: 56px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 20px;
+        background: #0f172a;
+        border-bottom: 1px solid #1e293b;
+        position: sticky;
+        top: 0;
+        z-index: 30;
+    }
+
+    .brand {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 15px;
+        font-weight: 700;
+        color: #ffffff;
+        margin-right: 8px;
+        white-space: nowrap;
+    }
+
+    .brand svg {
+        color: #34d399;
+    }
+
+    .file-info {
+        font-size: 12px;
+        color: #94a3b8;
+        font-family: monospace;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 260px;
+    }
+
+    .toolbar-actions {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    button, .file-label {
+        border: 0;
+        border-radius: 6px;
+        padding: 7px 14px;
+        background: #1e293b;
+        color: #f8fafc;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.15s;
+        border: 1px solid #334155;
+    }
+
+    button:hover, .file-label:hover {
+        background: #334155;
+    }
+
+    button.primary {
+        background: #059669;
+        border-color: #047857;
+        color: #ffffff;
+        font-weight: 600;
+    }
+
+    button.primary:hover {
+        background: #10b981;
+    }
+
+    button.danger {
+        background: #7f1d1d;
+        border-color: #991b1b;
+        color: #fca5a5;
+    }
+
+    button.danger:hover {
+        background: #991b1b;
+    }
+
+    button:disabled {
+        opacity: .4;
+        cursor: not-allowed;
+    }
+
+    input[type="file"] {
+        display: none;
+    }
+
+    /* MAIN WORKSPACE */
+    .layout {
+        display: flex;
+        height: calc(100vh - 56px);
+    }
+
+    /* SIDEBAR */
+    .sidebar {
+        width: 300px;
+        padding: 16px;
+        background: #0f172a;
+        border-right: 1px solid #1e293b;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .sidebar h3 {
+        margin: 0 0 8px;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #64748b;
+        font-weight: 700;
+    }
+
+    .drop-zone {
+        border: 1px dashed #334155;
+        border-radius: 8px;
+        padding: 14px 10px;
+        text-align: center;
+        color: #cbd5e1;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+        background: #090d16;
+    }
+
+    .drop-zone:hover, .drop-zone.dragover {
+        border-color: #10b981;
+        background: #064e3b15;
+    }
+
+    .scope-selector {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+        background: #090d16;
+        padding: 3px;
+        border-radius: 6px;
+        border: 1px solid #1e293b;
+    }
+
+    .scope-btn {
+        padding: 6px;
+        font-size: 11px;
+        border-radius: 4px;
+        background: transparent;
+        color: #94a3b8;
+        text-align: center;
+        cursor: pointer;
+        border: 0;
+    }
+
+    .scope-btn.active {
+        background: #1e293b;
+        color: #ffffff;
+        font-weight: 600;
+    }
+
+    .page-nav {
+        display: flex;
+        gap: 8px;
+    }
+
+    .page-nav button {
+        flex: 1;
+        justify-content: center;
+    }
+
+    .page-number {
+        text-align: center;
+        font-size: 12px;
+        font-family: monospace;
+        color: #cbd5e1;
+        margin-top: 6px;
+    }
+
+    .zoom-nav {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .zoom-nav button {
+        flex: 1;
+        justify-content: center;
+    }
+
+    .zoom-label {
+        font-size: 12px;
+        font-family: monospace;
+        color: #94a3b8;
+        min-width: 48px;
+        text-align: center;
+    }
+
+    .box-list {
+        font-size: 12px;
+        flex: 1;
+        overflow-y: auto;
+        max-height: 220px;
+    }
+
+    .box-item {
+        padding: 8px 10px;
+        margin-bottom: 6px;
+        border-radius: 6px;
+        background: #090d16;
+        border: 1px solid #1e293b;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .security-badge {
+        padding: 10px 12px;
+        border-radius: 6px;
+        background: #042f2e;
+        border: 1px solid #065f46;
+        font-size: 11px;
+        color: #a7f3d0;
+        line-height: 1.4;
+    }
+
+    /* VIEWER CANVAS AREA */
+    .viewer {
+        flex: 1;
+        overflow: auto;
+        padding: 30px;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        background: #060911;
+        position: relative;
+    }
+
+    #pageContainer {
+        position: relative;
+        display: inline-block;
+        box-shadow: 0 15px 35px rgba(0,0,0,0.8);
+        background: white;
+        line-height: 0;
+        border-radius: 2px;
+        border: 1px solid #334155;
+    }
+
+    #pdfCanvas {
+        display: block;
+    }
+
+    #overlay {
+        position: absolute;
+        inset: 0;
+        cursor: crosshair;
+    }
+
+    .censor-box {
+        position: absolute;
+        background: #000000;
+        border: 1px solid #10b981;
+        pointer-events: auto;
+    }
+
+    .censor-badge {
+        position: absolute;
+        top: 0;
+        left: 0;
+        background: #000;
+        color: #34d399;
+        font-size: 9px;
+        font-family: monospace;
+        padding: 2px 4px;
+        pointer-events: none;
+    }
+
+    /* EXPORT PROGRESS OVERLAY */
+    .progress-modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.75);
+        backdrop-filter: blur(4px);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+    }
+
+    .progress-card {
+        background: #0f172a;
+        border: 1px solid #1e293b;
+        padding: 24px;
+        border-radius: 12px;
+        width: 380px;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.9);
+    }
+
+    .progress-bar-bg {
+        width: 100%;
+        background: #1e293b;
+        height: 6px;
+        border-radius: 3px;
+        overflow: hidden;
+        margin-top: 10px;
+    }
+
+    .progress-bar-fill {
+        background: #10b981;
+        height: 100%;
+        width: 0%;
+        transition: width 0.15s;
+    }
+
+    /* CUSTOM TOAST NOTIFICATIONS & DIALOGS */
+    .toast-container {
+        position: fixed;
+        bottom: 24px;
+        right: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        z-index: 9999;
+        pointer-events: none;
+        max-width: 360px;
+    }
+    @media (max-width: 768px) {
+        .toast-container {
+            bottom: 70px;
+            left: 12px;
+            right: 12px;
+            max-width: 100%;
+        }
+    }
+    .custom-toast {
+        pointer-events: auto;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        background: rgba(15, 23, 42, 0.95);
+        border: 1px solid #334155;
+        border-radius: 8px;
+        color: #f8fafc;
+        font-size: 12px;
+        backdrop-filter: blur(8px);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        animation: toastIn 0.25s ease-out;
+    }
+    .custom-toast.success { border-color: #059669; color: #6ee7b7; }
+    .custom-toast.warning { border-color: #d97706; color: #fde68a; }
+    .custom-toast.error { border-color: #e11d48; color: #fca5a5; }
+    .custom-toast.info { border-color: #0284c7; color: #7dd3fc; }
+    @keyframes toastIn {
+        from { opacity: 0; transform: translateY(12px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .custom-modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(2, 6, 23, 0.82);
+        backdrop-filter: blur(4px);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        padding: 16px;
+    }
+    .custom-modal-card {
+        background: #0f172a;
+        border: 1px solid #1e293b;
+        border-radius: 12px;
+        width: 100%;
+        max-width: 380px;
+        padding: 20px;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+    }
+
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: #64748b;
+        text-align: center;
+        max-width: 400px;
+        margin: auto;
+    }
+
+    .empty-state h2 {
+        color: #f1f5f9;
+        font-size: 18px;
+        margin: 12px 0 6px;
+    }
+
+    /* RESPONSIVE MOBILE STYLES */
+    @media (max-width: 768px) {
+        .toolbar {
+            padding: 0 8px;
+            gap: 6px;
+        }
+        .file-info {
+            display: none;
+        }
+        .toolbar-actions button#extractDoBtn,
+        .toolbar-actions button#isolateDoBtn,
+        .toolbar-actions div:has(#qualitySelect) {
+            display: none;
+        }
+        .sidebar {
+            position: fixed;
+            top: 56px;
+            bottom: 0;
+            left: 0;
+            z-index: 50;
+            width: 82vw;
+            max-width: 320px;
+            box-shadow: 10px 0 30px rgba(0,0,0,0.8);
+            transform: translateX(-100%);
+            transition: transform 0.25s ease-in-out;
+        }
+        .sidebar.open {
+            transform: translateX(0);
+        }
+        .viewer {
+            padding: 12px 8px 70px 8px;
+        }
+        #mobileBottomBar {
+            display: flex !important;
+        }
+        #mobileMenuToggle {
+            display: inline-flex !important;
+        }
+        #sidebarBackdrop.open {
+            display: block !important;
+        }
+    }
+
+    #mobileBottomBar {
+        display: none;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 52px;
+        background: #0f172a;
+        border-top: 1px solid #1e293b;
+        z-index: 40;
+        align-items: center;
+        justify-content: space-around;
+        padding: 0 8px;
+    }
+    .mobile-tab-btn {
+        background: transparent;
+        border: 0;
+        color: #94a3b8;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 3px;
+        font-size: 10px;
+        padding: 4px;
+        cursor: pointer;
+    }
+    .mobile-tab-btn svg {
+        width: 18px;
+        height: 18px;
+    }
+    #sidebarBackdrop {
+        display: none;
+        position: fixed;
+        inset: 56px 0 0 0;
+        background: rgba(0,0,0,0.6);
+        z-index: 45;
+    }
+</style>
+</head>
+
+<body>
+
+<!-- TOP TOOLBAR -->
+<header class="toolbar">
+    <button id="mobileMenuToggle" style="display:none; padding:6px; background:transparent; border:0; color:#fff;" title="Toggle Sidebar">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <div class="brand">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            <path d="m9 12 2 2 4-4"></path>
+        </svg>
+        <span>PDF Censor Studio</span>
+    </div>
+
+    <span id="fileInfo" class="file-info">No document opened</span>
+
+    <div class="toolbar-actions">
+        <label class="file-label" for="pdfInput">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Open PDF
+        </label>
+        <input id="pdfInput" type="file" accept="application/pdf">
+
+        <button id="clearBtn" disabled>Clear All</button>
+
+        <button id="extractDoBtn" style="background:#d97706; border-color:#b45309; color:#fff;" disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
+            Extract DO Numbers
+        </button>
+
+        <button id="isolateDoBtn" style="background:#7c3aed; border-color:#6d28d9; color:#fff;" disabled title="Clear all contents of PDF except for DO area">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span id="isolateDoBtnText">Clear Image (Keep DO)</span>
+        </button>
+
+        <div style="display:flex; align-items:center; background:#020617; border:1px solid #334155; border-radius:6px; padding:2px;">
+            <button id="colorWhiteBtn" style="padding:3px 8px; font-size:11px; background:#f8fafc; color:#0f172a; border:0; border-radius:4px; font-weight:700; cursor:pointer;" title="Whiteout (90%+ smaller file size)">White</button>
+            <button id="colorBlackBtn" style="padding:3px 8px; font-size:11px; background:transparent; color:#94a3b8; border:0; border-radius:4px; cursor:pointer;" title="Blackout">Black</button>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:6px; background:#090d16; border:1px solid #334155; border-radius:6px; padding:4px 8px; font-size:12px;">
+            <span style="color:#94a3b8; font-weight:500;">Size:</span>
+            <select id="qualitySelect" style="background:transparent; color:#f8fafc; border:0; font-size:12px; outline:none; cursor:pointer;">
+                <option value="compact" style="background:#0f172a; color:#f8fafc;">Compact / Email (~150-250 KB/pg)</option>
+                <option value="balanced" selected style="background:#0f172a; color:#f8fafc;">High Quality / Balanced (~350-500 KB/pg)</option>
+                <option value="max" style="background:#0f172a; color:#f8fafc;">Max / Print (Uncompressed)</option>
+            </select>
+        </div>
+
+        <button id="exportBtn" class="primary" disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export Sanitized PDF
+        </button>
+    </div>
+</header>
+
+<!-- MAIN WORKSPACE -->
+<div class="layout">
+    <aside class="sidebar">
+        <div id="dropZone" class="drop-zone">
+            <strong style="color:#ffffff;">Drop PDF Document Here</strong>
+            <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Scanned and digital PDFs supported</div>
+        </div>
+
+        <div>
+            <h3>Redaction Scope</h3>
+            <div class="scope-selector">
+                <button id="scopeAll" class="scope-btn active">All Pages</button>
+                <button id="scopeCurrent" class="scope-btn">Current Only</button>
+            </div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 6px; line-height: 1.4;">
+                Boxes drawn in <strong>All Pages</strong> will cover the exact position across the entire document.
+            </div>
+        </div>
+
+        <div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <h3 style="margin:0;">Layout Templates</h3>
+                <div style="display:flex; gap:4px;">
+                    <button id="exportTplBtn" style="padding:2px 6px; font-size:10px;" title="Export templates to JSON backup">Backup</button>
+                    <label style="padding:2px 6px; font-size:10px; cursor:pointer;" class="file-label" title="Import templates from JSON">
+                        Import
+                        <input id="importTplInput" type="file" accept="application/json" style="display:none;">
+                    </label>
+                </div>
+            </div>
+
+            <button id="saveTplBtn" style="width:100%; margin-bottom:8px; justify-content:center; background:#064e3b; border-color:#047857; color:#a7f3d0;" disabled>
+                ★ Save Current as Template
+            </button>
+
+            <div id="tplList" style="max-height:120px; overflow-y:auto; display:flex; flex-direction:column; gap:4px;">
+                <span style="color:#475569; font-size:11px; font-style:italic;">No templates saved yet.</span>
+            </div>
+        </div>
+
+        <div>
+            <h3>Page Navigation</h3>
+            <div class="page-nav">
+                <button id="prevBtn" disabled>Previous</button>
+                <button id="nextBtn" disabled>Next</button>
+            </div>
+            <div id="pageNumber" class="page-number">-- / --</div>
+        </div>
+
+        <div>
+            <h3>Zoom Preview</h3>
+            <div class="zoom-nav">
+                <button id="zoomOutBtn" disabled>−</button>
+                <span id="zoomLabel" class="zoom-label">150%</span>
+                <button id="zoomInBtn" disabled>+</button>
+            </div>
+        </div>
+
+        <div>
+            <h3>Active Redactions (<span id="boxCount">0</span>)</h3>
+            <div id="boxList" class="box-list">
+                <span style="color:#475569;">No censor boxes yet. Drag across the document to redact.</span>
+            </div>
+        </div>
+
+        <div class="security-badge">
+            <strong>100% In-Browser Privacy:</strong>
+            Redactions are permanently burned into raw image pixels before export, destroying OCR text and vector data.
+        </div>
+    </aside>
+
+    <main class="viewer">
+        <div id="emptyState" class="empty-state">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                <path d="m9 12 2 2 4-4"></path>
+            </svg>
+            <h2>Open a PDF to Begin</h2>
+            <p style="font-size: 13px; line-height: 1.5;">
+                Drag and drop your confidential or scanned PDF document into this window to draw redactions and safely export.
+            </p>
+        </div>
+
+        <div id="pageContainer" hidden>
+            <canvas id="pdfCanvas"></canvas>
+            <div id="overlay" style="touch-action:none;"></div>
+        </div>
+    </main>
+</div>
+
+<!-- SIDEBAR BACKDROP FOR MOBILE -->
+<div id="sidebarBackdrop"></div>
+
+<!-- MOBILE BOTTOM BAR -->
+<div id="mobileBottomBar">
+    <button id="mobileRedactTab" class="mobile-tab-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        <span>Redact</span>
+    </button>
+    <button id="mobileTplTab" class="mobile-tab-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        <span>Templates</span>
+    </button>
+    <button id="mobileKeepDoTab" class="mobile-tab-btn" style="color:#c084fc;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+        <span id="mobileKeepDoText">Keep DO</span>
+    </button>
+    <button id="mobileDoTab" class="mobile-tab-btn" style="color:#f59e0b;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
+        <span>Extract DO</span>
+    </button>
+    <button id="mobileExportTab" class="mobile-tab-btn" style="color:#34d399; font-weight:600;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Export</span>
+    </button>
+</div>
+
+<!-- EXPORT PROGRESS MODAL -->
+<div id="progressModal" class="progress-modal">
+    <div class="progress-card">
+        <div style="font-size: 14px; font-weight: 600; color: #ffffff; margin-bottom: 4px;">
+            Sanitizing & Exporting PDF
+        </div>
+        <div id="progressText" style="font-size: 12px; color: #34d399;">
+            Burning redactions into page pixels...
+        </div>
+        <div class="progress-bar-bg">
+            <div id="progressBar" class="progress-bar-fill"></div>
+        </div>
+    </div>
+</div>
+
+<!-- DO NUMBER EXTRACTION MODAL -->
+<div id="doModal" class="progress-modal">
+    <div class="progress-card" style="width: 540px; max-width: 90vw;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div>
+                <div id="doModalTitle" style="font-size: 15px; font-weight: 700; color: #ffffff;">
+                    Extracted DO Numbers
+                </div>
+                <div id="doModalSubtitle" style="font-size: 12px; color: #94a3b8; margin-top:2px;">
+                    Zone-based targeted recognition across document
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <div style="display:flex; background:#020617; border:1px solid #1e293b; border-radius:6px; padding:2px;">
+                    <button id="toggleDoCleanBtn" style="padding:3px 8px; font-size:11px; background:#f59e0b20; color:#f59e0b; border:0; border-radius:4px; font-weight:600; cursor:pointer;">DO Only</button>
+                    <button id="toggleDoPageBtn" style="padding:3px 8px; font-size:11px; background:transparent; color:#94a3b8; border:0; border-radius:4px; cursor:pointer;">By Page</button>
+                </div>
+                <button id="closeDoModalBtn" style="padding:2px 8px; font-size:12px; background:transparent; border:0; color:#94a3b8; cursor:pointer;">✕</button>
+            </div>
+        </div>
+
+        <div id="doProgressBarBg" class="progress-bar-bg" style="margin-bottom:12px; display:none;">
+            <div id="doProgressBar" class="progress-bar-fill" style="background:#f59e0b;"></div>
+        </div>
+
+        <!-- Clean DO List View -->
+        <div id="doCleanView" style="border: 1px solid #1e293b; border-radius: 6px; background: #020617; padding: 14px; margin-bottom: 14px;">
+            <div id="doCleanListText" style="font-family: monospace; font-size: 14px; line-height: 1.6; color: #34d399; font-weight: 600; max-height: 220px; overflow-y: auto; user-select: all;">
+                <!-- Populated with clean DOs -->
+            </div>
+            <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid #1e293b; display: flex; justify-content: space-between; align-items: center;">
+                <div id="doCleanTotalCount" style="font-family: monospace; font-size: 13px; font-weight: 700; color: #f59e0b;">
+                    total do. : 0
+                </div>
+                <div style="font-size: 11px; color: #64748b;">
+                    Duplicates removed
+                </div>
+            </div>
+        </div>
+
+        <!-- Detailed Table View (hidden by default) -->
+        <div id="doTableContainer" style="display:none; max-height: 260px; overflow-y: auto; border: 1px solid #1e293b; border-radius: 6px; background: #060911; margin-bottom: 14px;">
+            <table style="width:100%; border-collapse:collapse; font-size:12px; text-align:left;">
+                <thead style="background:#0f172a; color:#94a3b8; position:sticky; top:0;">
+                    <tr>
+                        <th style="padding:6px 10px; border-bottom:1px solid #1e293b; width:70px;">Page</th>
+                        <th style="padding:6px 10px; border-bottom:1px solid #1e293b;">DO Number</th>
+                        <th style="padding:6px 10px; border-bottom:1px solid #1e293b; color:#64748b;">Raw OCR</th>
+                    </tr>
+                </thead>
+                <tbody id="doTableBody" style="font-family:monospace; color:#cbd5e1;">
+                    <!-- Rows populated dynamically -->
+                </tbody>
+            </table>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+            <button id="copyDoBtn" class="primary" style="background:#059669; border-color:#047857; color:#fff;">Copy Clean List</button>
+            <button id="csvDoBtn" style="background:#1e293b; color:#f8fafc;">Download CSV</button>
+            <button id="closeDoModalBtn2">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div id="toastContainer" class="toast-container"></div>
+
+<!-- CUSTOM CONFIRM DIALOG MODAL -->
+<div id="customConfirmModal" class="custom-modal-overlay">
+    <div class="custom-modal-card">
+        <div style="display:flex; gap:12px; align-items:flex-start; margin-bottom:16px;">
+            <div id="confirmModalIcon" style="padding:8px; border-radius:50%; background:rgba(239, 68, 68, 0.15); color:#f87171;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+            </div>
+            <div>
+                <div id="confirmModalTitle" style="font-size:14px; font-weight:600; color:#ffffff;">Confirm Action</div>
+                <div id="confirmModalMessage" style="font-size:12px; color:#94a3b8; margin-top:4px; line-height:1.4;">Are you sure?</div>
+            </div>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px; border-top:1px solid #1e293b; padding-top:12px;">
+            <button id="confirmCancelBtn" style="background:transparent; border:1px solid #334155; color:#cbd5e1; font-size:12px; padding:6px 12px;">Cancel</button>
+            <button id="confirmOkBtn" style="background:#dc2626; border:none; color:#ffffff; font-size:12px; padding:6px 14px; font-weight:600; border-radius:6px; cursor:pointer;">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<!-- CUSTOM PROMPT DIALOG MODAL -->
+<div id="customPromptModal" class="custom-modal-overlay">
+    <div class="custom-modal-card">
+        <div id="promptModalTitle" style="font-size:14px; font-weight:600; color:#ffffff; margin-bottom:4px;">Enter Details</div>
+        <div id="promptModalMessage" style="font-size:12px; color:#94a3b8; margin-bottom:12px; line-height:1.4;">Please enter a value:</div>
+        <input id="promptModalInput" type="text" style="width:100%; box-sizing:border-box; padding:8px 12px; background:#020617; border:1px solid #334155; border-radius:6px; color:#f8fafc; font-size:12px; outline:none; margin-bottom:14px;" />
+        <div style="display:flex; justify-content:flex-end; gap:8px; border-top:1px solid #1e293b; padding-top:12px;">
+            <button id="promptCancelBtn" style="background:transparent; border:1px solid #334155; color:#cbd5e1; font-size:12px; padding:6px 12px;">Cancel</button>
+            <button id="promptOkBtn" style="background:#059669; border:none; color:#ffffff; font-size:12px; padding:6px 14px; font-weight:600; border-radius:6px; cursor:pointer;">Save</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const pdfjsLib = window.pdfjsLib;
+const { jsPDF } = window.jspdf;
+
+const pdfInput = document.getElementById("pdfInput");
+const dropZone = document.getElementById("dropZone");
+const fileInfo = document.getElementById("fileInfo");
+const emptyState = document.getElementById("emptyState");
+
+const pageContainer = document.getElementById("pageContainer");
+const pdfCanvas = document.getElementById("pdfCanvas");
+const overlay = document.getElementById("overlay");
+
+const prevBtn = document.getElementById("prevBtn");
+const nextBtn = document.getElementById("nextBtn");
+const clearBtn = document.getElementById("clearBtn");
+const exportBtn = document.getElementById("exportBtn");
+
+const zoomInBtn = document.getElementById("zoomInBtn");
+const zoomOutBtn = document.getElementById("zoomOutBtn");
+const zoomLabel = document.getElementById("zoomLabel");
+
+const scopeAll = document.getElementById("scopeAll");
+const scopeCurrent = document.getElementById("scopeCurrent");
+
+const pageNumber = document.getElementById("pageNumber");
+const boxList = document.getElementById("boxList");
+const boxCount = document.getElementById("boxCount");
+
+const saveTplBtn = document.getElementById("saveTplBtn");
+const tplList = document.getElementById("tplList");
+const exportTplBtn = document.getElementById("exportTplBtn");
+const importTplInput = document.getElementById("importTplInput");
+
+const extractDoBtn = document.getElementById("extractDoBtn");
+const isolateDoBtn = document.getElementById("isolateDoBtn");
+const isolateDoBtnText = document.getElementById("isolateDoBtnText");
+const colorWhiteBtn = document.getElementById("colorWhiteBtn");
+const colorBlackBtn = document.getElementById("colorBlackBtn");
+const doModal = document.getElementById("doModal");
+const doModalTitle = document.getElementById("doModalTitle");
+const doModalSubtitle = document.getElementById("doModalSubtitle");
+const doProgressBarBg = document.getElementById("doProgressBarBg");
+const doProgressBar = document.getElementById("doProgressBar");
+const doTableContainer = document.getElementById("doTableContainer");
+const doTableBody = document.getElementById("doTableBody");
+const doCleanView = document.getElementById("doCleanView");
+const doCleanListText = document.getElementById("doCleanListText");
+const doCleanTotalCount = document.getElementById("doCleanTotalCount");
+const toggleDoCleanBtn = document.getElementById("toggleDoCleanBtn");
+const toggleDoPageBtn = document.getElementById("toggleDoPageBtn");
+const copyDoBtn = document.getElementById("copyDoBtn");
+const csvDoBtn = document.getElementById("csvDoBtn");
+const closeDoModalBtn = document.getElementById("closeDoModalBtn");
+const closeDoModalBtn2 = document.getElementById("closeDoModalBtn2");
+
+let doViewMode = "clean"; // "clean" or "page"
+
+const sidebar = document.querySelector(".sidebar");
+const mobileMenuToggle = document.getElementById("mobileMenuToggle");
+const sidebarBackdrop = document.getElementById("sidebarBackdrop");
+const mobileRedactTab = document.getElementById("mobileRedactTab");
+const mobileTplTab = document.getElementById("mobileTplTab");
+const mobileKeepDoTab = document.getElementById("mobileKeepDoTab");
+const mobileKeepDoText = document.getElementById("mobileKeepDoText");
+const mobileDoTab = document.getElementById("mobileDoTab");
+const mobileExportTab = document.getElementById("mobileExportTab");
+
+function toggleMobileSidebar(force) {
+    if (!sidebar) return;
+    const willOpen = typeof force === "boolean" ? force : !sidebar.classList.contains("open");
+    sidebar.classList.toggle("open", willOpen);
+    if (sidebarBackdrop) sidebarBackdrop.classList.toggle("open", willOpen);
+}
+
+if (mobileMenuToggle) {
+    mobileMenuToggle.addEventListener("click", () => toggleMobileSidebar());
+}
+if (sidebarBackdrop) {
+    sidebarBackdrop.addEventListener("click", () => toggleMobileSidebar(false));
+}
+if (mobileRedactTab) {
+    mobileRedactTab.addEventListener("click", () => toggleMobileSidebar(true));
+}
+if (mobileTplTab) {
+    mobileTplTab.addEventListener("click", () => toggleMobileSidebar(true));
+}
+if (mobileKeepDoTab) {
+    mobileKeepDoTab.addEventListener("click", () => {
+        isolateDoBtn.click();
+        if (mobileKeepDoText) {
+            mobileKeepDoText.textContent = isIsolateDoMode ? "Keep DO (ON)" : "Keep DO";
+        }
+    });
+}
+if (mobileDoTab) {
+    mobileDoTab.addEventListener("click", () => {
+        extractDoBtn.click();
+    });
+}
+if (mobileExportTab) {
+    mobileExportTab.addEventListener("click", () => {
+        exportBtn.click();
+    });
+}
+
+// CUSTOM TOAST & DIALOG HELPERS
+function showToast(message, type = "info") {
+    const container = document.getElementById("toastContainer");
+    if (!container) return;
+    const toast = document.createElement("div");
+    toast.className = `custom-toast ${type}`;
+    
+    let iconSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`;
+    if (type === "success") {
+        iconSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`;
+    } else if (type === "warning") {
+        iconSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+    } else if (type === "error") {
+        iconSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`;
+    }
+    
+    toast.innerHTML = `
+        <div style="flex-shrink:0; display:flex;">${iconSvg}</div>
+        <div style="flex:1;">${message}</div>
+    `;
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = "0";
+        toast.style.transition = "opacity 0.3s";
+        setTimeout(() => toast.remove(), 300);
+    }, 3500);
+}
+
+function showConfirmDialog(title, message, onConfirm, isDestructive = true) {
+    const modal = document.getElementById("customConfirmModal");
+    const titleEl = document.getElementById("confirmModalTitle");
+    const msgEl = document.getElementById("confirmModalMessage");
+    const okBtn = document.getElementById("confirmOkBtn");
+    const cancelBtn = document.getElementById("confirmCancelBtn");
+    const iconEl = document.getElementById("confirmModalIcon");
+    if (!modal) return;
+
+    titleEl.textContent = title;
+    msgEl.textContent = message;
+    okBtn.style.background = isDestructive ? "#dc2626" : "#059669";
+    iconEl.style.background = isDestructive ? "rgba(239, 68, 68, 0.15)" : "rgba(16, 185, 129, 0.15)";
+    iconEl.style.color = isDestructive ? "#f87171" : "#34d399";
+
+    const cleanup = () => {
+        modal.style.display = "none";
+        okBtn.onclick = null;
+        cancelBtn.onclick = null;
+    };
+
+    okBtn.onclick = () => {
+        cleanup();
+        onConfirm();
+    };
+    cancelBtn.onclick = () => cleanup();
+    modal.style.display = "flex";
+}
+
+function showPromptDialog(title, message, defaultVal, onConfirm) {
+    const modal = document.getElementById("customPromptModal");
+    const titleEl = document.getElementById("promptModalTitle");
+    const msgEl = document.getElementById("promptModalMessage");
+    const inputEl = document.getElementById("promptModalInput");
+    const okBtn = document.getElementById("promptOkBtn");
+    const cancelBtn = document.getElementById("promptCancelBtn");
+    if (!modal) return;
+
+    titleEl.textContent = title;
+    msgEl.textContent = message || "Please enter a value:";
+    inputEl.value = defaultVal || "";
+
+    const cleanup = () => {
+        modal.style.display = "none";
+        okBtn.onclick = null;
+        cancelBtn.onclick = null;
+    };
+
+    okBtn.onclick = () => {
+        const val = inputEl.value.trim();
+        if (val) {
+            cleanup();
+            onConfirm(val);
+        }
+    };
+    cancelBtn.onclick = () => cleanup();
+    modal.style.display = "flex";
+    setTimeout(() => {
+        inputEl.focus();
+        inputEl.select();
+    }, 50);
+}
+
+let doZoneBoxId = null;
+let doExtractionResults = [];
+
+const progressModal = document.getElementById("progressModal");
+const progressText = document.getElementById("progressText");
+const progressBar = document.getElementById("progressBar");
+
+let pdfDoc = null;
+let currentPage = 1;
+let currentZoom = 1.5;
+let currentScope = "all";
+let originalFileName = "document.pdf";
+
+let censorBoxes = [];
+let drawing = false;
+let startX = 0;
+let startY = 0;
+let previewBox = null;
+let redactionColor = "white"; // "white" or "black"
+let isIsolateDoMode = false;
+
+// Color toggle
+colorWhiteBtn.addEventListener("click", () => {
+    redactionColor = "white";
+    colorWhiteBtn.style.background = "#f8fafc";
+    colorWhiteBtn.style.color = "#0f172a";
+    colorWhiteBtn.style.fontWeight = "700";
+    colorBlackBtn.style.background = "transparent";
+    colorBlackBtn.style.color = "#94a3b8";
+    colorBlackBtn.style.fontWeight = "normal";
+    renderBoxes();
+});
+
+colorBlackBtn.addEventListener("click", () => {
+    redactionColor = "black";
+    colorBlackBtn.style.background = "#1e293b";
+    colorBlackBtn.style.color = "#ffffff";
+    colorBlackBtn.style.fontWeight = "700";
+    colorWhiteBtn.style.background = "transparent";
+    colorWhiteBtn.style.color = "#94a3b8";
+    colorWhiteBtn.style.fontWeight = "normal";
+    renderBoxes();
+});
+
+// Clear Image (Keep DO Only) toggle
+isolateDoBtn.addEventListener("click", () => {
+    if (!pdfDoc || censorBoxes.length === 0) return;
+    isIsolateDoMode = !isIsolateDoMode;
+    if (isIsolateDoMode) {
+        isolateDoBtn.style.background = "#9333ea";
+        isolateDoBtn.style.borderColor = "#a855f7";
+        isolateDoBtn.style.boxShadow = "0 0 12px rgba(168, 85, 247, 0.5)";
+        isolateDoBtnText.textContent = "Keep DO Only (ACTIVE)";
+    } else {
+        isolateDoBtn.style.background = "#7c3aed";
+        isolateDoBtn.style.borderColor = "#6d28d9";
+        isolateDoBtn.style.boxShadow = "none";
+        isolateDoBtnText.textContent = "Clear Image (Keep DO)";
+    }
+    renderBoxes();
+});
+
+// Scope selector
+scopeAll.addEventListener("click", () => {
+    currentScope = "all";
+    scopeAll.classList.add("active");
+    scopeCurrent.classList.remove("active");
+});
+
+scopeCurrent.addEventListener("click", () => {
+    currentScope = "current";
+    scopeCurrent.classList.add("active");
+    scopeAll.classList.remove("active");
+});
+
+// Load PDF Document
+async function loadPDF(file) {
+    if (!file) return;
+
+    if (!pdfjsLib && window.pdfjsLib) {
+        pdfjsLib = window.pdfjsLib;
+    }
+
+    try {
+        fileInfo.textContent = "Loading " + file.name + "...";
+        originalFileName = file.name;
+
+        const buffer = await file.arrayBuffer();
+
+        pdfDoc = await pdfjsLib.getDocument({
+            data: new Uint8Array(buffer),
+            cMapUrl: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/",
+            cMapPacked: true,
+            standardFontDataUrl: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/standard_fonts/",
+        }).promise;
+
+        currentPage = 1;
+        censorBoxes = [];
+
+        emptyState.hidden = true;
+        pageContainer.hidden = false;
+
+        fileInfo.textContent = `${file.name} (${pdfDoc.numPages} pages)`;
+        updateButtons();
+        await renderPage(currentPage);
+        updateBoxList();
+        showToast(`Loaded ${file.name} (${pdfDoc.numPages} pages)`, "success");
+    } catch (err) {
+        console.error("Error opening PDF:", err);
+        showToast("Could not open this PDF: " + (err.message || "Corrupt or invalid file."), "error");
+        fileInfo.textContent = "Error loading document";
+    }
+}
+
+// Render specific page
+async function renderPage(pageNum) {
+    if (!pdfDoc) return;
+
+    const page = await pdfDoc.getPage(pageNum);
+    const viewport = page.getViewport({ scale: currentZoom });
+
+    const width = Math.ceil(viewport.width);
+    const height = Math.ceil(viewport.height);
+
+    pdfCanvas.width = width;
+    pdfCanvas.height = height;
+    pdfCanvas.style.width = width + "px";
+    pdfCanvas.style.height = height + "px";
+
+    overlay.style.width = width + "px";
+    overlay.style.height = height + "px";
+
+    pageContainer.style.width = width + "px";
+    pageContainer.style.height = height + "px";
+
+    const ctx = pdfCanvas.getContext("2d", { alpha: false });
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+
+    await page.render({
+        canvasContext: ctx,
+        viewport: viewport
+    }).promise;
+
+    pageNumber.textContent = `Page ${pageNum} of ${pdfDoc.numPages}`;
+    zoomLabel.textContent = Math.round(currentZoom * 100) + "%";
+
+    renderBoxes();
+    updateButtons();
+}
+
+// Render visible censorship boxes
+function renderBoxes() {
+    overlay.innerHTML = "";
+
+    const targetBox = censorBoxes.find(b => b.id === doZoneBoxId) || censorBoxes[0];
+
+    // If Isolate DO mode is active: mask out everything except DO box
+    if (isIsolateDoMode && targetBox) {
+        const maskBg = redactionColor === "white" ? "rgba(255,255,255,0.95)" : "rgba(0,0,0,0.95)";
+        
+        // 4 boundary masks
+        const topMask = document.createElement("div");
+        topMask.style.cssText = `position:absolute; top:0; left:0; right:0; height:${targetBox.y * 100}%; background:${maskBg}; pointer-events:none; border-bottom: 1px solid rgba(168,85,247,0.5);`;
+        overlay.appendChild(topMask);
+
+        const bottomMask = document.createElement("div");
+        bottomMask.style.cssText = `position:absolute; top:${(targetBox.y + targetBox.height) * 100}%; left:0; right:0; bottom:0; background:${maskBg}; pointer-events:none; border-top: 1px solid rgba(168,85,247,0.5);`;
+        overlay.appendChild(bottomMask);
+
+        const leftMask = document.createElement("div");
+        leftMask.style.cssText = `position:absolute; top:${targetBox.y * 100}%; left:0; width:${targetBox.x * 100}%; height:${targetBox.height * 100}%; background:${maskBg}; pointer-events:none; border-right: 1px solid rgba(168,85,247,0.5);`;
+        overlay.appendChild(leftMask);
+
+        const rightMask = document.createElement("div");
+        rightMask.style.cssText = `position:absolute; top:${targetBox.y * 100}%; left:${(targetBox.x + targetBox.width) * 100}%; right:0; height:${targetBox.height * 100}%; background:${maskBg}; pointer-events:none; border-left: 1px solid rgba(168,85,247,0.5);`;
+        overlay.appendChild(rightMask);
+
+        // DO Area highlight frame
+        const doFrame = document.createElement("div");
+        doFrame.style.cssText = `position:absolute; left:${targetBox.x * 100}%; top:${targetBox.y * 100}%; width:${targetBox.width * 100}%; height:${targetBox.height * 100}%; border: 2px dashed #a855f7; pointer-events:none; background: rgba(168,85,247,0.1);`;
+        doFrame.innerHTML = `<span style="position:absolute; top:-22px; left:0; background:#7c3aed; color:#fff; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px;">DO Area (Preserved)</span>`;
+        overlay.appendChild(doFrame);
+        return;
+    }
+
+    const visible = censorBoxes.filter(b => b.page === "all" || b.page === currentPage);
+
+    visible.forEach(box => {
+        const div = document.createElement("div");
+        div.className = "censor-box";
+        div.style.left = (box.x * 100) + "%";
+        div.style.top = (box.y * 100) + "%";
+        div.style.width = (box.width * 100) + "%";
+        div.style.height = (box.height * 100) + "%";
+        if (redactionColor === "white") {
+            div.style.background = "#ffffff";
+            div.style.border = "1px solid #cbd5e1";
+            div.style.boxShadow = "0 1px 4px rgba(0,0,0,0.1)";
+        } else {
+            div.style.background = "#000000";
+            div.style.border = "1px solid #1e293b";
+        }
+
+        const badge = document.createElement("div");
+        badge.className = "censor-badge";
+        badge.textContent = box.page === "all" ? "ALL" : `P.${box.page}`;
+        if (redactionColor === "white") {
+            badge.style.background = "#e2e8f0";
+            badge.style.color = "#0f172a";
+        }
+        div.appendChild(badge);
+
+        overlay.appendChild(div);
+    });
+}
+
+// Drawing interactions
+overlay.addEventListener("pointerdown", e => {
+    if (!pdfDoc) return;
+    const rect = overlay.getBoundingClientRect();
+    startX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    startY = Math.max(0, Math.min(e.clientY - rect.top, rect.height));
+    drawing = true;
+
+    previewBox = document.createElement("div");
+    previewBox.className = "censor-box";
+    previewBox.style.left = startX + "px";
+    previewBox.style.top = startY + "px";
+    previewBox.style.width = "0px";
+    previewBox.style.height = "0px";
+
+    overlay.appendChild(previewBox);
+    overlay.setPointerCapture(e.pointerId);
+});
+
+overlay.addEventListener("pointermove", e => {
+    if (!drawing || !previewBox) return;
+    const rect = overlay.getBoundingClientRect();
+    const curX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    const curY = Math.max(0, Math.min(e.clientY - rect.top, rect.height));
+
+    const left = Math.min(startX, curX);
+    const top = Math.min(startY, curY);
+    const w = Math.abs(curX - startX);
+    const h = Math.abs(curY - startY);
+
+    previewBox.style.left = left + "px";
+    previewBox.style.top = top + "px";
+    previewBox.style.width = w + "px";
+    previewBox.style.height = h + "px";
+});
+
+overlay.addEventListener("pointerup", e => {
+    if (!drawing || !previewBox) return;
+    const rect = overlay.getBoundingClientRect();
+    const curX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    const curY = Math.max(0, Math.min(e.clientY - rect.top, rect.height));
+
+    const left = Math.min(startX, curX);
+    const top = Math.min(startY, curY);
+    const w = Math.abs(curX - startX);
+    const h = Math.abs(curY - startY);
+
+    drawing = false;
+    previewBox.remove();
+    previewBox = null;
+
+    if (w < 6 || h < 6) return;
+
+    censorBoxes.push({
+        id: Math.random().toString(36).substring(2, 9),
+        x: left / rect.width,
+        y: top / rect.height,
+        width: w / rect.width,
+        height: h / rect.height,
+        page: currentScope === "all" ? "all" : currentPage
+    });
+
+    renderBoxes();
+    updateBoxList();
+    updateButtons();
+});
+
+// Update list of boxes in sidebar
+function updateBoxList() {
+    boxCount.textContent = censorBoxes.length;
+
+    if (censorBoxes.length === 0) {
+        boxList.innerHTML = `<span style="color:#475569;">No censor boxes yet. Drag across the document to redact.</span>`;
+        return;
+    }
+
+    boxList.innerHTML = "";
+    censorBoxes.forEach((box, i) => {
+        const item = document.createElement("div");
+        item.className = "box-item";
+        const isDoZone = doZoneBoxId === box.id;
+        item.innerHTML = `
+            <div>
+                <div style="font-weight: 600;">Area #${i + 1} (${box.page === "all" ? "All Pages" : `Page ${box.page}`})</div>
+                <div style="font-size: 10px; color: #64748b;">${Math.round(box.width*100)}% × ${Math.round(box.height*100)}%</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:4px;">
+                <button style="padding: 2px 6px; font-size: 10px; background:${isDoZone ? '#78350f' : '#1e293b'}; color:${isDoZone ? '#fde68a' : '#cbd5e1'}; border-color:${isDoZone ? '#d97706' : '#334155'};" onclick="window.setDoZone('${box.id}')">
+                    ${isDoZone ? 'DO Zone ★' : 'Set DO'}
+                </button>
+                <button style="padding: 2px 6px; font-size: 11px;" onclick="window.removeBox('${box.id}')">✕</button>
+            </div>
+        `;
+        boxList.appendChild(item);
+    });
+}
+
+window.setDoZone = function(id) {
+    doZoneBoxId = id;
+    updateBoxList();
+    showToast("Box marked as DO Number extraction zone!", "success");
+};
+
+window.removeBox = function(id) {
+    censorBoxes = censorBoxes.filter(b => b.id !== id);
+    renderBoxes();
+    updateBoxList();
+    updateButtons();
+};
+
+// Clear All
+clearBtn.addEventListener("click", () => {
+    if (censorBoxes.length === 0) return;
+    showConfirmDialog(
+        "Remove All Redactions?",
+        `Are you sure you want to remove all ${censorBoxes.length} censorship boxes?`,
+        () => {
+            censorBoxes = [];
+            renderBoxes();
+            updateBoxList();
+            updateButtons();
+            showToast("Removed all redactions", "info");
+        },
+        true
+    );
+});
+
+// Page Navigation
+prevBtn.addEventListener("click", async () => {
+    if (!pdfDoc || currentPage <= 1) return;
+    currentPage--;
+    await renderPage(currentPage);
+});
+
+nextBtn.addEventListener("click", async () => {
+    if (!pdfDoc || currentPage >= pdfDoc.numPages) return;
+    currentPage++;
+    await renderPage(currentPage);
+});
+
+// Zoom Controls
+zoomInBtn.addEventListener("click", async () => {
+    if (currentZoom >= 2.5) return;
+    currentZoom = Number((currentZoom + 0.2).toFixed(1));
+    await renderPage(currentPage);
+});
+
+zoomOutBtn.addEventListener("click", async () => {
+    if (currentZoom <= 0.6) return;
+    currentZoom = Number((currentZoom - 0.2).toFixed(1));
+    await renderPage(currentPage);
+});
+
+// Update button states
+function updateButtons() {
+    const loaded = !!pdfDoc;
+    const hasBoxes = censorBoxes.length > 0;
+    prevBtn.disabled = !loaded || currentPage <= 1;
+    nextBtn.disabled = !loaded || currentPage >= (pdfDoc?.numPages || 1);
+    zoomInBtn.disabled = !loaded;
+    zoomOutBtn.disabled = !loaded;
+    clearBtn.disabled = !hasBoxes;
+    exportBtn.disabled = !hasBoxes || !loaded;
+    if (saveTplBtn) saveTplBtn.disabled = !hasBoxes;
+    if (extractDoBtn) extractDoBtn.disabled = !hasBoxes || !loaded;
+    if (isolateDoBtn) isolateDoBtn.disabled = !hasBoxes || !loaded;
+}
+
+// Layout Templates Management
+let savedTemplates = [];
+try {
+    const raw = localStorage.getItem("pdf_censor_templates");
+    if (raw) savedTemplates = JSON.parse(raw);
+} catch (e) {
+    console.error("Could not load templates:", e);
+}
+
+function saveTemplates() {
+    try {
+        localStorage.setItem("pdf_censor_templates", JSON.stringify(savedTemplates));
+    } catch (e) {
+        console.error("Could not save templates to localStorage:", e);
+    }
+    renderTemplatesList();
+}
+
+function renderTemplatesList() {
+    if (!tplList) return;
+    if (savedTemplates.length === 0) {
+        tplList.innerHTML = `<span style="color:#475569; font-size:11px; font-style:italic;">No templates saved yet.</span>`;
+        return;
+    }
+
+    tplList.innerHTML = "";
+    savedTemplates.forEach(tpl => {
+        const item = document.createElement("div");
+        item.style.cssText = "display:flex; justify-content:space-between; align-items:center; background:#090d16; border:1px solid #1e293b; padding:4px 8px; border-radius:4px; font-size:11px;";
+        
+        const applyBtn = document.createElement("button");
+        applyBtn.style.cssText = "background:transparent; border:0; color:#38bdf8; font-weight:600; padding:0; text-align:left; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px;";
+        applyBtn.textContent = `⚡ ${tpl.name} (${tpl.boxes.length})`;
+        applyBtn.title = `Apply ${tpl.name} template (${tpl.boxes.length} zones)`;
+        applyBtn.onclick = () => applyTemplate(tpl);
+
+        const delBtn = document.createElement("button");
+        delBtn.style.cssText = "background:transparent; border:0; color:#64748b; padding:0 4px; cursor:pointer; font-size:11px;";
+        delBtn.textContent = "✕";
+        delBtn.title = "Delete template";
+        delBtn.onclick = (e) => {
+            e.stopPropagation();
+            showConfirmDialog(
+                "Delete Template?",
+                `Are you sure you want to delete template "${tpl.name}"?`,
+                () => {
+                    savedTemplates = savedTemplates.filter(t => t.id !== tpl.id);
+                    saveTemplates();
+                    showToast("Template deleted", "info");
+                },
+                true
+            );
+        };
+
+        item.appendChild(applyBtn);
+        item.appendChild(delBtn);
+        tplList.appendChild(item);
+    });
+}
+
+function applyTemplate(tpl) {
+    censorBoxes = tpl.boxes.map(b => ({
+        ...b,
+        id: Math.random().toString(36).substring(2, 9)
+    }));
+    renderBoxes();
+    updateBoxList();
+    updateButtons();
+    showToast(`Applied template "${tpl.name}"`, "info");
+}
+
+saveTplBtn.addEventListener("click", () => {
+    if (censorBoxes.length === 0) {
+        showToast("Please draw at least one redaction box before saving a template.", "warning");
+        return;
+    }
+    const defaultName = `Template ${savedTemplates.length + 1} (${censorBoxes.length} zones)`;
+    showPromptDialog(
+        "Save Layout Template",
+        "Give this layout template a name to reuse:",
+        defaultName,
+        (name) => {
+            if (!name || !name.trim()) return;
+            savedTemplates.unshift({
+                id: "tpl_" + Date.now().toString(36),
+                name: name.trim(),
+                createdAt: Date.now(),
+                boxes: censorBoxes.map(b => ({
+                    x: b.x,
+                    y: b.y,
+                    width: b.width,
+                    height: b.height,
+                    page: b.page
+                }))
+            });
+            saveTemplates();
+            showToast(`Template "${name.trim()}" saved!`, "success");
+        }
+    );
+});
+
+exportTplBtn.addEventListener("click", () => {
+    if (savedTemplates.length === 0) {
+        showToast("No templates saved yet!", "warning");
+        return;
+    }
+    const blob = new Blob([JSON.stringify(savedTemplates, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `pdf-censor-templates-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("Template file exported!", "success");
+});
+
+importTplInput.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+        try {
+            const data = JSON.parse(evt.target.result);
+            if (Array.isArray(data)) {
+                const ids = new Set(savedTemplates.map(t => t.id));
+                const added = data.filter(t => t && t.name && Array.isArray(t.boxes) && !ids.has(t.id));
+                savedTemplates = [...added, ...savedTemplates];
+                saveTemplates();
+                showToast(`Imported ${added.length} template(s)!`, "success");
+            } else {
+                showToast("Invalid template JSON format.", "error");
+            }
+        } catch (err) {
+            showToast("Could not parse template JSON: " + err.message, "error");
+        }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+});
+
+// Render initial templates on page load
+renderTemplatesList();
+
+// Export Sanitized PDF with Pixel Burn-In
+exportBtn.addEventListener("click", async () => {
+    if (!pdfDoc || censorBoxes.length === 0) return;
+
+    try {
+        progressModal.style.display = "flex";
+        let outputPdf = null;
+        const total = pdfDoc.numPages;
+
+        const qualityChoice = document.getElementById("qualitySelect").value;
+        const qualityConfigs = {
+            compact: { scale: 1.3, jpegQuality: 0.72 },
+            balanced: { scale: 1.6, jpegQuality: 0.85 },
+            max: { scale: 2.0, jpegQuality: 0.95 },
+        };
+        const { scale: EXPORT_SCALE, jpegQuality } = qualityConfigs[qualityChoice] || qualityConfigs.balanced;
+
+        for (let i = 1; i <= total; i++) {
+            progressText.textContent = `Burning redactions into page ${i} of ${total} (${qualityChoice.toUpperCase()})...`;
+            progressBar.style.width = Math.round(((i - 1) / total) * 100) + "%";
+
+            const page = await pdfDoc.getPage(i);
+            const viewport = page.getViewport({ scale: EXPORT_SCALE });
+
+            const offCanvas = document.createElement("canvas");
+            offCanvas.width = Math.ceil(viewport.width);
+            offCanvas.height = Math.ceil(viewport.height);
+
+            const ctx = offCanvas.getContext("2d", { alpha: false });
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, offCanvas.width, offCanvas.height);
+
+            await page.render({
+                canvasContext: ctx,
+                viewport: viewport
+            }).promise;
+
+            // Redact according to active color and mode
+            const fillHex = redactionColor === "white" ? "#ffffff" : "#000000";
+            ctx.fillStyle = fillHex;
+
+            if (isIsolateDoMode) {
+                // Clear entire PDF except DO area
+                const target = censorBoxes.find(b => b.id === doZoneBoxId) || censorBoxes[0];
+                if (target) {
+                    const doX = target.x * offCanvas.width;
+                    const doY = target.y * offCanvas.height;
+                    const doW = target.width * offCanvas.width;
+                    const doH = target.height * offCanvas.height;
+                    const cw = offCanvas.width;
+                    const ch = offCanvas.height;
+
+                    // 1. Top region above DO box
+                    ctx.fillRect(0, 0, cw, Math.max(0, doY));
+                    // 2. Bottom region below DO box
+                    ctx.fillRect(0, Math.min(ch, doY + doH), cw, Math.max(0, ch - (doY + doH)));
+                    // 3. Left region beside DO box
+                    ctx.fillRect(0, doY, Math.max(0, doX), doH);
+                    // 4. Right region beside DO box
+                    ctx.fillRect(Math.min(cw, doX + doW), doY, Math.max(0, cw - (doX + doW)), doH);
+                }
+            } else {
+                // Normal redaction: fill all active boxes
+                const pageBoxes = censorBoxes.filter(b => b.page === "all" || b.page === i);
+                pageBoxes.forEach(box => {
+                    ctx.fillRect(
+                        box.x * offCanvas.width,
+                        box.y * offCanvas.height,
+                        box.width * offCanvas.width,
+                        box.height * offCanvas.height
+                    );
+                });
+            }
+
+            const imgData = offCanvas.toDataURL("image/jpeg", jpegQuality);
+            const isLandscape = viewport.width >= viewport.height;
+            const pw = viewport.width / EXPORT_SCALE;
+            const ph = viewport.height / EXPORT_SCALE;
+
+            if (!outputPdf) {
+                outputPdf = new jsPDF({
+                    orientation: isLandscape ? "landscape" : "portrait",
+                    unit: "pt",
+                    format: [pw, ph],
+                    compress: true
+                });
+            } else {
+                outputPdf.addPage([pw, ph], isLandscape ? "landscape" : "portrait");
+            }
+
+            outputPdf.addImage(imgData, "JPEG", 0, 0, pw, ph, undefined, "FAST");
+            progressBar.style.width = Math.round((i / total) * 100) + "%";
+            await new Promise(r => setTimeout(r, 15));
+        }
+
+        const clean = originalFileName.replace(/\.pdf$/i, "");
+        outputPdf.save(`${clean}_SANITIZED.pdf`);
+        progressText.textContent = "Complete! Download triggered.";
+        showToast("Sanitized PDF downloaded successfully!", "success");
+
+        setTimeout(() => {
+            progressModal.style.display = "none";
+        }, 1200);
+    } catch (err) {
+        console.error("Export error:", err);
+        showToast("Export failed: " + err.message, "error");
+        progressModal.style.display = "none";
+    }
+});
+
+// Extract DO Numbers across all pages using targeted ROI + Tesseract.js
+extractDoBtn.addEventListener("click", async () => {
+    if (!pdfDoc || censorBoxes.length === 0) return;
+
+    const targetBox = censorBoxes.find(b => b.id === doZoneBoxId) || censorBoxes[0];
+    if (!targetBox) return;
+
+    try {
+        doModal.style.display = "flex";
+        doProgressBarBg.style.display = "block";
+        doProgressBar.style.width = "0%";
+        doTableBody.innerHTML = "";
+        doExtractionResults = [];
+        doModalSubtitle.textContent = `Initializing OCR worker...`;
+
+        const total = pdfDoc.numPages;
+        const worker = await Tesseract.createWorker("eng");
+        await worker.setParameters({
+            tessedit_char_whitelist: "0123456789- ",
+            tessedit_pageseg_mode: "7"
+        });
+
+        for (let i = 1; i <= total; i++) {
+            doModalSubtitle.textContent = `Scanning Page ${i} of ${total}...`;
+            doProgressBar.style.width = Math.round(((i - 1) / total) * 100) + "%";
+
+            const page = await pdfDoc.getPage(i);
+
+            // 1. Try native digital text first
+            let matched = "";
+            let raw = "";
+
+            try {
+                const textContent = await page.getTextContent();
+                const unscaled = page.getViewport({ scale: 1.0 });
+                const pw = unscaled.width;
+                const ph = unscaled.height;
+
+                const boxL = targetBox.x * pw;
+                const boxR = (targetBox.x + targetBox.width) * pw;
+                const boxT = targetBox.y * ph;
+                const boxB = (targetBox.y + targetBox.height) * ph;
+
+                const inside = [];
+                for (const item of textContent.items) {
+                    if (!item.str) continue;
+                    const tx = item.transform[4];
+                    const ty = ph - item.transform[5];
+                    if (tx >= boxL - 10 && tx <= boxR + 10 && ty >= boxT - 10 && ty <= boxB + 10) {
+                        inside.push(item.str);
+                    }
+                }
+
+                if (inside.length > 0) {
+                    const text = inside.join(" ").trim();
+                    const m8 = text.match(/\b(8\d{7})\b/) || text.match(/\b(\d{8})\b/);
+                    if (m8 && m8[1]) {
+                        matched = m8[1];
+                        raw = `(Digital) ${text}`;
+                    } else {
+                        const digits = text.replace(/\D/g, "");
+                        const sub = digits.match(/(8\d{7})/) || digits.match(/(\d{8})/);
+                        if (sub && sub[1]) {
+                            matched = sub[1];
+                            raw = `(Digital) ${text}`;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn("Digital text check error:", e);
+            }
+
+            // 2. High-contrast OCR fallback with 0-9 whitelist
+            if (!matched) {
+                const scale = 2.0;
+                const viewport = page.getViewport({ scale });
+
+                const pageCanvas = document.createElement("canvas");
+                pageCanvas.width = Math.ceil(viewport.width);
+                pageCanvas.height = Math.ceil(viewport.height);
+                const ctx = pageCanvas.getContext("2d", { alpha: false });
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+
+                await page.render({ canvasContext: ctx, viewport }).promise;
+
+                // Crop ROI
+                const cropX = Math.floor(targetBox.x * pageCanvas.width);
+                const cropY = Math.floor(targetBox.y * pageCanvas.height);
+                const cropW = Math.ceil(targetBox.width * pageCanvas.width);
+                const cropH = Math.ceil(targetBox.height * pageCanvas.height);
+
+                const cropCanvas = document.createElement("canvas");
+                cropCanvas.width = cropW;
+                cropCanvas.height = cropH;
+                const cropCtx = cropCanvas.getContext("2d", { alpha: false });
+                cropCtx.drawImage(pageCanvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+                // Binarize high-contrast
+                const imgData = cropCtx.getImageData(0, 0, cropW, cropH);
+                const d = imgData.data;
+                for (let p = 0; p < d.length; p += 4) {
+                    const br = 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2];
+                    const v = br > 150 ? 255 : 0;
+                    d[p] = v; d[p+1] = v; d[p+2] = v;
+                }
+                cropCtx.putImageData(imgData, 0, 0);
+
+                const { data } = await worker.recognize(cropCanvas);
+                raw = (data.text || "").trim();
+
+                // Extract clean DO number
+                const eightDigitMatch = raw.match(/\b(8\d{7})\b/) || raw.match(/\b(\d{8})\b/);
+                if (eightDigitMatch && eightDigitMatch[1]) {
+                    matched = eightDigitMatch[1];
+                } else {
+                    const digitOnly = raw.replace(/\D/g, "");
+                    const sub8 = digitOnly.match(/(8\d{7})/) || digitOnly.match(/(\d{8})/);
+                    if (sub8 && sub8[1]) {
+                        matched = sub8[1];
+                    } else {
+                        matched = digitOnly.length >= 8 ? digitOnly.slice(0, 8) : digitOnly;
+                    }
+                }
+            }
+
+            const resObj = { page: i, doNumber: matched || "(Not found)", rawText: raw };
+            doExtractionResults.push(resObj);
+
+            const tr = document.createElement("tr");
+            tr.style.borderBottom = "1px solid #1e293b";
+            tr.innerHTML = `
+                <td style="padding:6px 10px; color:#94a3b8;">P.${i}</td>
+                <td style="padding:6px 10px; color:#34d399; font-weight:bold;">${resObj.doNumber}</td>
+                <td style="padding:6px 10px; color:#64748b; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${resObj.rawText || "—"}</td>
+            `;
+            doTableBody.appendChild(tr);
+
+            // Update clean list in real-time
+            renderCleanDoList();
+
+            doProgressBar.style.width = Math.round((i / total) * 100) + "%";
+        }
+
+        await worker.terminate();
+        renderCleanDoList();
+        doModalSubtitle.textContent = `Completed! ${total} pages processed.`;
+        showToast(`Extraction complete! Found ${getUniqueDoNumbers().length} unique DO numbers.`, "success");
+    } catch (err) {
+        console.error("DO Extraction failed:", err);
+        showToast("Extraction error: " + err.message, "error");
+    }
+});
+
+function getUniqueDoNumbers() {
+    const valid = doExtractionResults
+        .map(r => (r.doNumber || "").trim())
+        .filter(n => n && n !== "(Not found)");
+    return Array.from(new Set(valid));
+}
+
+function renderCleanDoList() {
+    const uniques = getUniqueDoNumbers();
+    if (uniques.length === 0) {
+        doCleanListText.innerHTML = '<span style="color:#64748b; font-style:italic;">Scanning for DO numbers...</span>';
+        doCleanTotalCount.textContent = "total do. : 0";
+    } else {
+        doCleanListText.innerHTML = uniques.map(n => `<div style="margin-bottom:2px;">${n}</div>`).join("");
+        doCleanTotalCount.textContent = `total do. : ${uniques.length}`;
+    }
+}
+
+function updateDoViewDisplay() {
+    if (doViewMode === "clean") {
+        doCleanView.style.display = "block";
+        doTableContainer.style.display = "none";
+        toggleDoCleanBtn.style.background = "#f59e0b20";
+        toggleDoCleanBtn.style.color = "#f59e0b";
+        toggleDoCleanBtn.style.fontWeight = "600";
+        toggleDoPageBtn.style.background = "transparent";
+        toggleDoPageBtn.style.color = "#94a3b8";
+        toggleDoPageBtn.style.fontWeight = "normal";
+        copyDoBtn.textContent = "Copy Clean List";
+    } else {
+        doCleanView.style.display = "none";
+        doTableContainer.style.display = "block";
+        toggleDoPageBtn.style.background = "#f59e0b20";
+        toggleDoPageBtn.style.color = "#f59e0b";
+        toggleDoPageBtn.style.fontWeight = "600";
+        toggleDoCleanBtn.style.background = "transparent";
+        toggleDoCleanBtn.style.color = "#94a3b8";
+        toggleDoCleanBtn.style.fontWeight = "normal";
+        copyDoBtn.textContent = "Copy All Pages";
+    }
+}
+
+toggleDoCleanBtn.addEventListener("click", () => {
+    doViewMode = "clean";
+    updateDoViewDisplay();
+});
+
+toggleDoPageBtn.addEventListener("click", () => {
+    doViewMode = "page";
+    updateDoViewDisplay();
+});
+
+copyDoBtn.addEventListener("click", () => {
+    if (doExtractionResults.length === 0) return;
+    let txt = "";
+    if (doViewMode === "clean") {
+        const uniques = getUniqueDoNumbers();
+        txt = `${uniques.join("\n")}\n\ntotal do. : ${uniques.length}`;
+    } else {
+        txt = doExtractionResults.map(r => `Page ${r.page}: ${r.doNumber}`).join("\n");
+    }
+    navigator.clipboard.writeText(txt);
+    copyDoBtn.textContent = "Copied!";
+    showToast("Copied DO numbers to clipboard!", "success");
+    setTimeout(() => {
+        copyDoBtn.textContent = doViewMode === "clean" ? "Copy Clean List" : "Copy All Pages";
+    }, 2000);
+});
+
+csvDoBtn.addEventListener("click", () => {
+    if (doExtractionResults.length === 0) return;
+    const rows = [["Page", "Extracted DO Number", "Raw Detected OCR"]];
+    doExtractionResults.forEach(r => {
+        rows.push([String(r.page), `"${r.doNumber.replace(/"/g, '""')}"`, `"${r.rawText.replace(/"/g, '""')}"`]);
+    });
+    const csvContent = "data:text/csv;charset=utf-8," + rows.map(e => e.join(",")).join("\n");
+    const link = document.createElement("a");
+    link.href = encodeURI(csvContent);
+    link.download = `DO_Numbers_${originalFileName.replace(/\.pdf$/i, "")}.csv`;
+    link.click();
+});
+
+[closeDoModalBtn, closeDoModalBtn2].forEach(btn => {
+    btn.addEventListener("click", () => {
+        doModal.style.display = "none";
+    });
+});
+
+// File upload & drag and drop
+pdfInput.addEventListener("change", e => {
+    if (e.target.files[0]) loadPDF(e.target.files[0]);
+});
+
+dropZone.addEventListener("click", () => pdfInput.click());
+
+["dragenter", "dragover"].forEach(name => {
+    window.addEventListener(name, e => {
+        e.preventDefault();
+        dropZone.classList.add("dragover");
+    });
+});
+
+["dragleave", "drop"].forEach(name => {
+    window.addEventListener(name, e => {
+        e.preventDefault();
+        dropZone.classList.remove("dragover");
+    });
+});
+
+window.addEventListener("drop", e => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file && (file.type === "application/pdf" || file.name.endsWith(".pdf"))) {
+        loadPDF(file);
+    }
+});
+</script>
+
+</body>
+</html>
